@@ -60,9 +60,12 @@ def area(a, b, c):
 
 
 def phi(x, p):
-    return x if p == 1 else type(x)(1)
+    return x if p != 0 else type(x)(1) 
 
-
+"""
+[Barycentric Interpolation
+4 Barycentric interpolation over polygons](see: https://www.inf.usi.ch/faculty/hormann/papers/Hormann.2014.BI.pdf)
+"""
 def fba(F, x, xx, p):
     n = len(xx)
 
@@ -77,8 +80,8 @@ def fba(F, x, xx, p):
         return R[i if i < n else i - n]
 
     def WW(i):
-        aa = A[i - 1] * A[i]
-        return (RR(i + 1) * A[i - 1] - R[i] * B[i] + R[i - 1] * A[i]) / aa
+        aa = np.prod([(A[k] if np.mod(i - k, n) > 1 else 1.0) for k in range(n)])
+        return (RR(i + 1) * A[i - 1] - R[i] * B[i] + R[i - 1] * A[i]) * aa
 
     W = [WW(i) for i in range(n)]
 
@@ -115,7 +118,7 @@ def plot(f, x, y, xnew, ynew):
     fig, ax1 = plt.subplots(1, 1, figsize=(10, 6), height_ratios=[1.0])
     znew = np.array([[f(x, y) for x in xnew] for y in ynew])
 
-    im = plt.contourf(xnew, ynew, znew, levels=np.linspace(-0.1, 1.1, num=25))
+    im = plt.contourf(xnew, ynew, znew, levels=np.linspace(-0.1, 1.2, num=27))
     ax1.set_aspect("equal")
     fig.colorbar(im, ax=ax1)
     ax1.plot(x, y, "co", markersize=1)
@@ -132,12 +135,15 @@ def example(make, p, x, y, M):
 
 
 x = [1.0, 2, 3, 3, 2, 1]
-y = [1.0, 1, 1, 2, 2, 2]
-M = [0.0, 0, 0, 0, 1, 0]
+y = [1.0, 1, 1, 2, 1.2, 2]
+M = [0.0, 0, 0, 1, 1, 0]
 
-example(make_pkl, 2, x, y, M)
-example(make_pmi, 3, x, y, M)
-example(make_pli, 0, x, y, M)
+#example(make_pkl, 2, x, y, M)
+#example(make_pmi, 3, x, y, M)
+#example(make_pli, 0, x, y, M)
 example(make_pba, 1, x, y, M)
+example(make_pba, 0, x, y, M)
+
+# fba(M, [1.9, 1.9], list(zip(x, y)), 0)
 
 plt.show()
