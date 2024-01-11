@@ -164,9 +164,19 @@ def plot(f, x, y, xnew, ynew, X=None, Y=None):
     fig, ax2 = plt.subplots(1, 1, figsize=(10, 6), height_ratios=[1.0])
     ax2 = plt.axes(projection="3d")
     cmap = plt.get_cmap()
-    ax2.contour(x2, y2, znew.T, 10, lw=3, colors=["black"], levels=levels, linestyles="solid", linewidth=0.5)
-    surf = ax2.plot_surface(x2, y2, znew.T, cmap=cmap, alpha = 0.99)
-    fig.colorbar(surf, ax = ax2, shrink = 0.5, aspect = 10)
+    ax2.contour(
+        x2,
+        y2,
+        znew.T,
+        10,
+        lw=3,
+        colors=["black"],
+        levels=levels,
+        linestyles="solid",
+        linewidth=0.5,
+    )
+    surf = ax2.plot_surface(x2, y2, znew.T, cmap=cmap, alpha=0.99)
+    fig.colorbar(surf, ax=ax2, shrink=0.5, aspect=10)
 
     return znew
 
@@ -255,15 +265,15 @@ def data():
 if __name__ == "__main__":
     x, y, M, X, Y = data()
 
-    # example(make_pkl, x, y, M, 2)
-    # example(make_pmi, x, y, M, 3)
-    example(make_pli, x, y, M, 0)
-    # example(make_pba, x, y, M, 1)
-    # example(make_pba, x, y, M, 1)
-    # for i in range(len(x)):
-    #    example(make_pba, x, y, i, 1)
+    p = 1
 
-    example_fit(make_pli, x, y, M, 1, X, Y)
+    # make, p = make_pmi, 3
+    make, p = make_pkl, 2
+    # make = make_pli
+    # make = make_pba
+
+    example(make, x, y, M, p)
+    example_fit(make, x, y, M, p, X, Y)
 
     # fba(M, [1.9, 1.9], list(zip(x, y)), 0)
 
