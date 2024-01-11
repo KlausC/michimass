@@ -1,11 +1,15 @@
 #! /usr/bin/env python3
 
 import warnings
+import os
 
 warnings.filterwarnings("ignore")
+os.environ["XDG_SESSION_TYPE"] = "xcb"
 
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits import mplot3d  # für 3d-plots
+
 from scipy import linalg
 
 from scipy.interpolate import LinearNDInterpolator
@@ -75,9 +79,17 @@ def fba(F, x, xx, p):
     def XX(i):
         return xx[i if i < n else i - n]
 
+    D = [d(x, a) for a in xx]
+    e = 1e-8
+    while min(D) < e:
+        D = [d(x, a) for a in xx]
+        y = np.subtract(np.mean(D, axis=0), x)
+        x = np.add(x, np.multiply(y, 2 * e / linalg.norm(y)))
+        D = [d(x, a) for a in xx]
+
     A = [area(x, xx[i], XX(i + 1)) for i in range(n)]
     B = [area(x, xx[i - 1], XX(i + 1)) for i in range(n)]
-    R = [phi(d(x, xx[i]), p) for i in range(n)]
+    R = [phi(d, p) for d in D]
 
     def RR(i):
         return R[i if i < n else i - n]
@@ -85,11 +97,11 @@ def fba(F, x, xx, p):
     def WW(i):
         aa = np.prod([(A[k] if np.mod(i - k, n) > 1 else 1.0) for k in range(n)])
         ww = (RR(i + 1) * A[i - 1] - R[i] * B[i] + R[i - 1] * A[i]) * aa
-        return ww - 1e-8 if ww < 0 else ww + 1e-8
+        return ww - 1e-100 if ww < 0 else ww + 1e-100
 
     W = [WW(i) for i in range(n)]
 
-    W = np.divide(W, sum(W) + 1e-100)
+    W = np.divide(W, sum(W))
 
     return sum(W[i] * F[i] for i in range(n))
 
@@ -137,22 +149,26 @@ def plot(f, x, y, xnew, ynew, X=None, Y=None):
     b = round(np.max(znew) + 0.05, ndigits=1)
     num = round((b - a) / 0.05) + 1
 
-    im = plt.contourf(xnew, ynew, znew, levels=np.linspace(a, b, num=num))
+    levels = np.linspace(a, b, num=num)
+
+    im = plt.contourf(xnew, ynew, znew, levels=levels)
     ax1.set_aspect("equal")
     fig.colorbar(im, ax=ax1)
     ax1.plot(x, y, "co", markersize=1, color="orange")
     if X != None and Y != None:
         ax1.plot(X, Y, "co", markersize=1, color="red")
 
+    x2 = np.outer(xnew, np.ones(len(ynew)))
+    y2 = np.outer(np.ones(len(xnew)), ynew)
+
+    fig, ax2 = plt.subplots(1, 1, figsize=(10, 6), height_ratios=[1.0])
+    ax2 = plt.axes(projection="3d")
+    cmap = plt.get_cmap()
+    ax2.contour(x2, y2, znew.T, 10, lw=3, colors=["black"], levels=levels, linestyles="solid", linewidth=0.5)
+    surf = ax2.plot_surface(x2, y2, znew.T, cmap=cmap, alpha = 0.99)
+    fig.colorbar(surf, ax = ax2, shrink = 0.5, aspect = 10)
+
     return znew
-
-
-def example(make, x, y, M, p):
-    xx = np.linspace(np.min(x) - 0.1, max(x) + 0.1, num=50)
-    yy = np.linspace(np.min(y) - 0.1, max(y) + 0.1, num=50)
-    A = np.array(list(zip(x, y)))
-    pf = make(A, M, p)
-    return plot(pf, x, y, xx, yy)
 
 
 def make_fit(make, x, y, M, p, X, Y):
@@ -161,9 +177,8 @@ def make_fit(make, x, y, M, p, X, Y):
     A = np.array(list(zip(X, Y)))
     f = [make(A, i, p) for i in range(n)]
     B = np.array([[f[i](x[j], y[j]) for i in range(n)] for j in range(m)])
-    print("B = ", B)
-    #N = optimize(B, M)
-    N = np.matmul(linalg.pinv(B), M)
+    N = optimize(B, M)
+    # N = np.matmul(linalg.pinv(B), M)
     g = make(A, N, p)
     d = [g(x[i], y[i]) - M[i] for i in range(m)]
     print("d = ", d)
@@ -175,21 +190,47 @@ from scipy import optimize as opt
 
 
 def optimize(B, M):
+    M = np.matrix(M).T
+    B = np.matrix(B)
     m = np.size(B, 0)
     n = np.size(B, 1)
-    A = np.concatenate((B, np.negative(B)))
-    b = np.concatenate((M, np.negative(M)))
-    A = np.concatenate((A, np.negative(np.matrix(np.ones(2 * m)).T)), axis=1)
-    c = np.zeros(n + 1)
-    c[n] = 1
-    res = opt.linprog(c, A, b, bounds=(0, 1))
+    D = np.diag(np.ones(m))
+    E = np.matrix(np.ones(m)).T
+    Aeq = np.concatenate((B, -D, 0 * M), axis=1)
+    beq = 0 * E
+    A2 = np.concatenate((0 * B, D, -E), axis=1)
+    A3 = np.concatenate((0 * B, -D, -E), axis=1)
+    Aub = np.concatenate((A2, A3))
+    bub = np.concatenate((M, -M))
+    c = np.zeros(n + m + 1)
+    c[-1] = 1
+    print(Aub)
+    print(bub)
+    print(c)
+
+    bounds = np.concatenate(
+        (
+            [(None, None) for x in range(n)],
+            [(None, None) for x in range(m)],
+            [(0, None)],
+        )
+    )
+    res = opt.linprog(c, Aub, bub, Aeq, beq, bounds=bounds)
     if res.status != 0:
         print(res)
         raise (ArithmeticError("could not find optimal solution"))
-    print("res = ", res.x)
-    x = res.x[:-1]
+    print("res.x = ", res.x)
+    x = res.x[0:n]
     # x = np.matmul(linalg.pinv(B), M)
     return x
+
+
+def example(make, x, y, M, p):
+    xx = np.linspace(np.min(x) - 0.1, max(x) + 0.1, num=50)
+    yy = np.linspace(np.min(y) - 0.1, max(y) + 0.1, num=50)
+    A = np.array(list(zip(x, y)))
+    pf = make(A, M, p)
+    return plot(pf, x, y, xx, yy)
 
 
 def example_fit(make, x, y, M, p, X, Y):
@@ -199,24 +240,31 @@ def example_fit(make, x, y, M, p, X, Y):
     return plot(pf, x, y, xx, yy, X, Y)
 
 
-x = [1.0, 2, 3, 4, 4, 3, 2, 1, 1.5]
-y = [1.0, 1, 1, 1, 2, 2, 2.2, 2, 1.5]
-M = [0.0, 0, 0, 0, 1, 1, 1, 0, 0]
+def data():
+    x = [1.0, 2, 3, 4, 4, 3, 2, 1, 1.5]
+    y = [1.0, 1, 1, 1, 2, 2, 2.2, 2, 1.5]
+    M = [0.0, 0, 0, 0, 1, 1, 1, 0, 0]
 
-# example(make_pkl, x, y, M, 2)
-# example(make_pmi, x, y, M, 3)
-# example(make_pli, x, y, M, 0)
-# example(make_pba, x, y, M, 1)
-example(make_pba, x, y, M, 1)
-# for i in range(len(x)):
-#    example(make_pba, x, y, i, 1)
+    X = [0.8, 2, 3, 4.2, 4.2, 3, 2, 0.8]
+    Y = [0.8, 0.5, 0.5, 0.8, 2.2, 2.5, 2.3, 2.0]
+    X = [0.9, 2, 3, 4.1, 4.1, 3, 2, 0.9, 0.8]
+    Y = [1.0, 0.9, 0.9, 1, 2, 2.2, 2.3, 2, 1.5]
+    return x, y, M, X, Y
 
-X = [0.8, 2, 3, 4.2, 4.2, 3, 2, 0.8]
-Y = [0.8, 0.5, 0.5, 0.8, 2.2, 2.5, 2.3, 2.0]
-X = [1.0, 2, 3, 4, 4, 3, 2, 1]
-Y = [1.0, 0.9, 0.9, 1, 2, 2.2, 2.2, 2]
-example_fit(make_pba, x, y, M, 1, X, Y)
 
-# fba(M, [1.9, 1.9], list(zip(x, y)), 0)
+if __name__ == "__main__":
+    x, y, M, X, Y = data()
 
-plt.show()
+    # example(make_pkl, x, y, M, 2)
+    # example(make_pmi, x, y, M, 3)
+    example(make_pli, x, y, M, 0)
+    # example(make_pba, x, y, M, 1)
+    # example(make_pba, x, y, M, 1)
+    # for i in range(len(x)):
+    #    example(make_pba, x, y, i, 1)
+
+    example_fit(make_pli, x, y, M, 1, X, Y)
+
+    # fba(M, [1.9, 1.9], list(zip(x, y)), 0)
+
+    plt.show()
