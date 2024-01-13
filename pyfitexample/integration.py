@@ -1,4 +1,4 @@
-from .interpolation import make_pli as make
+from interpolation import make_pli as make
 
 import numpy as np
 
